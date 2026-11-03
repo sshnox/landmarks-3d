@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Landmarks</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0f1218;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #app { width: 100%; height: 100%; }
+  #toolbar {
+    position: absolute; top: 0; left: 0; right: 0; z-index: 10;
+    display: flex; align-items: center; gap: 14px; padding: 12px 18px;
+    background: rgba(15,18,24,0.82); backdrop-filter: blur(8px);
+    color: #e8edf5; border-bottom: 1px solid #26303d;
+  }
+  #toolbar strong { font-size: 15px; letter-spacing: 0.3px; }
+  select {
+    padding: 7px 12px; border-radius: 8px; border: 1px solid #334155;
+    background: #1a202b; color: #e8edf5; font-size: 14px;
+    outline: none; cursor: pointer;
+  }
+  #hint { font-size: 12px; opacity: 0.6; margin-left: auto; }
+  canvas { display: block; touch-action: none; }
+  select:focus-visible { outline: 2px solid #88aaff; outline-offset: 3px; }
+  @media (max-width: 600px) { #toolbar { flex-wrap: wrap; gap: 8px; } #hint { width: 100%; margin-left: 0; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toolbar">
+  <strong>3D Landmarks</strong>
+  <select id="picker" aria-label="Choose a landmark"></select>
+  <span id="hint">Drag to orbit &middot; Scroll to zoom</span>
+</div>
+
+<div id="load-error" role="alert" style="display:none;position:absolute;top:110px;padding:24px;color:#ffb4b4;z-index:20">The 3D viewer could not load. Check your internet connection and WebGL support, then reload.</div>
+<noscript>This 3D viewer needs JavaScript enabled.</noscript>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script>
+(function () {
+  'use strict';
+  if (!window.THREE) { document.getElementById('load-error').style.display = 'block'; return; }
+
+  /* ---------------- scene setup ---------------- */
+  var app = document.getElementById('app');
+  var picker = document.getElementById('picker');
+
+  var scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x11151c);
+  scene.fog = new THREE.Fog(0x11151c, 34, 80);
+
+  var camera = new THREE.PerspectiveCamera(
+    45, window.innerWidth / window.innerHeight, 0.1, 1000
+  );
+
+  var renderer;
+  try { renderer = new THREE.WebGLRenderer({ antialias: true }); }
+  catch (error) { document.getElementById('load-error').style.display = 'block'; return; }
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  app.appendChild(renderer.domElement);
+
+  /* lights */
+  scene.add(new THREE.AmbientLight(0xffffff, 0.62));
+
+  var keyLight = new THREE.DirectionalLight(0xffffff, 1.6);
+  keyLight.position.set(10, 16, 10);
+  keyLight.castShadow = true;
+  keyLight.shadow.mapSize.set(2048, 2048);
+  keyLight.shadow.camera.left = -16;
+  keyLight.shadow.camera.right = 16;
+  keyLight.shadow.camera.top = 16;
+  keyLight.shadow.camera.bottom = -16;
+  keyLight.shadow.camera.near = 1;
+  keyLight.shadow.camera.far = 60;
+  scene.add(keyLight);
+
+  var fillLight = new THREE.DirectionalLight(0x88aaff, 0.45);
+  fillLight.position.set(-8, 6, -10);
+  scene.add(fillLight);
+
+  /* ground + grid */
+  var ground = new THREE.Mesh(
+    new THREE.CircleGeometry(26, 64),
+    new THREE.MeshStandardMaterial({ color: 0x1b222c, roughness: 1 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -1.25;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  var grid = new THREE.GridHelper(26, 26, 0x2c3a4c, 0x22303f);
+  grid.position.y = -1.23;
+  scene.add(grid);
+
+  /* ---------------- orbit camera ---------------- */
+  var target = new THREE.Vector3(0, 2.0, 0);
+  var theta = Math.PI / 4;
+  var phi = Math.PI / 3.1;
+  var radius = 15;
+
+  function updateCamera() {
+    var x = radius * Math.sin(phi) * Math.cos(theta);
+    var y = radius * Math.cos(phi);
+    var z = radius * Math.sin(phi) * Math.sin(theta);
+    camera.position.set(target.x + x, target.y + y, target.z + z);
+    camera.lookAt(target);
+  }
+  updateCamera();
+
+  var el = renderer.domElement;
+  var dragging = false, px = 0, py = 0;
+
+  el.style.cursor = 'grab';
+  el.addEventListener('pointerdown', function (e) {
+    dragging = true; px = e.clientX; py = e.clientY;
+    el.style.cursor = 'grabbing';
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointerup', function () {
+    dragging = false; el.style.cursor = 'grab';
+  });
+  el.addEventListener('pointercancel', function () { dragging = false; el.style.cursor = 'grab'; });
+  el.addEventListener('lostpointercapture', function () { dragging = false; el.style.cursor = 'grab'; });
+  el.addEventListener('pointermove', function (e) {
+    if (!dragging) return;
+    var dx = e.clientX - px, dy = e.clientY - py;
+    px = e.clientX; py = e.clientY;
+    theta -= dx * 0.006;
+    phi = Math.max(0.22, Math.min(Math.PI / 2 - 0.06, phi - dy * 0.006));
+    updateCamera();
+  });
+  el.addEventListener('wheel', function (e) {
+    e.preventDefault();
+    radius = Math.max(6, Math.min(42, radius + (e.deltaY > 0 ? 1 : -1)));
+    updateCamera();
+  }, { passive: false });
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  /* ---------------- model builders ---------------- */
+  function buildEiffelTower() {
+    var g = new THREE.Group();
+    var brown = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.75 });
+    var dark  = new THREE.MeshStandardMaterial({ color: 0x5c3a1e, roughness: 0.85 });
+
+    [[0.9, 0.9], [-0.9, 0.9], [0.9, -0.9], [-0.9, -0.9]].forEach(function (p) {
+      var leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.34, 4, 4), brown);
+      leg.position.set(p[0] * 1.15, 2, p[1] * 1.15);
+      leg.rotation.y = Math.PI / 4;
+      g.add(leg);
+    });
+
+    var p1 = new THREE.Mesh(new THREE.BoxGeometry(3.3, 0.2, 3.3), dark);
+    p1.position.y = 4;
+    g.add(p1);
+
+    var mid = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.95, 3.2, 4), brown);
+    mid.position.y = 5.6;
+    mid.rotation.y = Math.PI / 4;
+    g.add(mid);
+
+    var p2 = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.16, 1.8), dark);
+    p2.position.y = 7.2;
+    g.add(p2);
+
+    var spire = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.22, 2.2, 4), brown);
+    spire.position.y = 8.5;
+    spire.rotation.y = Math.PI / 4;
+    g.add(spire);
+
+    g.scale.set(1.15, 1.15, 1.15);
+    g.position.y = -1.25;
+    return g;
+  }
+
+  function buildGreatWall() {
+    var g = new THREE.Group();
+    var stone     = new THREE.MeshStandardMaterial({ color: 0x9a8c7a, roughness: 0.95 });
+    var darkStone = new THREE.MeshStandardMaterial({ color: 0x6e6258, roughness: 0.95 });
+
+    var pts = [[-6, 0, -2], [-3, 0, 0], [0, 0, 1.5], [3, 0, 0], [6, 0, -2]];
+
+    for (var i = 0; i < pts.length - 1; i++) {
+      var a = pts[i], b = pts[i + 1];
+      var dx = b[0] - a[0], dz = b[2] - a[2];
+      var len = Math.sqrt(dx * dx + dz * dz);
+      var wall = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, len + 0.2), stone);
+      wall.position.set((a[0] + b[0]) / 2, 0.55, (a[2] + b[2]) / 2);
+      wall.rotation.y = Math.atan2(dx, dz);
+      g.add(wall);
+    }
+
+    pts.forEach(function (p) {
+      var tower = new THREE.Mesh(new THREE.BoxGeometry(1.7, 1.9, 1.7), darkStone);
+      tower.position.set(p[0], 0.95, p[2]);
+      g.add(tower);
+
+      var roof = new THREE.Mesh(new THREE.ConeGeometry(1.35, 0.9, 4), darkStone);
+      roof.position.set(p[0], 2.35, p[2]);
+      roof.rotation.y = Math.PI / 4;
+      g.add(roof);
+    });
+
+    g.position.y = -1.25;
+    return g;
+  }
+
+  function buildForbiddenCity() {
+    var g = new THREE.Group();
+    var red       = new THREE.MeshStandardMaterial({ color: 0xa62a2a, roughness: 0.8 });
+    var gold      = new THREE.MeshStandardMaterial({ color: 0xd4a017, roughness: 0.55 });
+    var darkGold  = new THREE.MeshStandardMaterial({ color: 0x8a6a1f, roughness: 0.7 });
+
+    var wall = new THREE.Mesh(new THREE.BoxGeometry(9, 1.4, 7), red);
+    wall.position.y = 0.7;
+    g.add(wall);
+
+    var court = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.08, 5.6), darkGold);
+    court.position.y = 1.44;
+    g.add(court);
+
+    var halls = [
+      { x: 0, z: 0,    w: 3.2, d: 2.0, h: 1.8 },
+      { x: 0, z: -2.3, w: 2.4, d: 1.6, h: 1.4 },
+      { x: 0, z: 2.3,  w: 2.4, d: 1.6, h: 1.4 }
+    ];
+    halls.forEach(function (h) {
+      var base = new THREE.Mesh(new THREE.BoxGeometry(h.w, h.h, h.d), red);
+      base.position.set(h.x, 1.4 + h.h / 2, h.z);
+      g.add(base);
+
+      var roof = new THREE.Mesh(
+        new THREE.ConeGeometry(Math.max(h.w, h.d) * 0.78, 0.9, 4), gold
+      );
+      roof.position.set(h.x, 1.4 + h.h + 0.45, h.z);
+      roof.rotation.y = Math.PI / 4;
+      g.add(roof);
+    });
+
+    [[-3.5, -2.6], [3.5, -2.6], [-3.5, 2.6], [3.5, 2.6]].forEach(function (p) {
+      var pav = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.1, 1.2), red);
+      pav.position.set(p[0], 1.95, p[1]);
+      g.add(pav);
+
+      var roof = new THREE.Mesh(new THREE.ConeGeometry(0.95, 0.7, 4), gold);
+      roof.position.set(p[0], 2.85, p[1]);
+      roof.rotation.y = Math.PI / 4;
+      g.add(roof);
+    });
+
+    g.position.y = -1.25;
+    return g;
+  }
+
+  function buildColosseum() {
+    var g = new THREE.Group();
+    var trav  = new THREE.MeshStandardMaterial({ color: 0xc2b280, roughness: 0.9 });
+    var dark  = new THREE.MeshStandardMaterial({ color: 0x8a7d5c, roughness: 0.95 });
+
+    var rx = 5.2, rz = 3.6, levels = 3, arches = 12;
+
+    for (var lvl = 0; lvl < levels; lvl++) {
+      var y = 0.6 + lvl * 1.2;
+
+      for (var i = 0; i < arches; i++) {
+        var ang = (i / arches) * Math.PI * 2;
+        var x = Math.cos(ang) * rx;
+        var z = Math.sin(ang) * rz;
+
+        var pillar = new THREE.Mesh(new THREE.BoxGeometry(0.44, 1.1, 0.44), trav);
+        pillar.position.set(x, y, z);
+        pillar.rotation.y = -ang;
+        g.add(pillar);
+
+        var arch = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.62, 0.14), dark);
+        arch.position.set(x * 0.97, y + 0.02, z * 0.97);
+        arch.rotation.y = -ang;
+        g.add(arch);
+      }
+
+      var band = new THREE.Mesh(
+        new THREE.CylinderGeometry(rx + 0.1, rx + 0.1, 0.12, 48, 1, true), trav
+      );
+      band.scale.z = rz / rx;
+      band.position.y = y + 0.62;
+      g.add(band);
+    }
+
+    for (var k = 0; k < 8; k++) {
+      var a2 = (k / 8) * Math.PI * 2;
+      var bx = Math.cos(a2) * rx;
+      var bz = Math.sin(a2) * rz;
+      var block = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.0, 0.5), trav);
+      block.position.set(bx, 4.25, bz);
+      block.rotation.y = -a2;
+      g.add(block);
+    }
+
+    var arena = new THREE.Mesh(
+      new THREE.CylinderGeometry(rx - 0.9, rx - 0.9, 0.1, 48), dark
+    );
+    arena.scale.z = (rz - 0.9) / (rx - 0.9);
+    arena.position.y = 0.05;
+    g.add(arena);
+
+    g.position.y = -1.25;
+    return g;
+  }
+
+  /* ---------------- landmarks registry ---------------- */
+  var LANDMARKS = [
+    { id: 'eiffel',          label: 'Eiffel Tower — Paris',      build: buildEiffelTower },
+    { id: 'great-wall',      label: 'Great Wall — China',        build: buildGreatWall },
+    { id: 'forbidden-city',  label: 'Forbidden City — Beijing',  build: buildForbiddenCity },
+    { id: 'colosseum',       label: 'Colosseum — Rome',          build: buildColosseum }
+  ];
+
+  var currentModel = null;
+
+  function show(id) {
+    if (currentModel) {
+      scene.remove(currentModel);
+      var geometries = new Set(), materials = new Set();
+      currentModel.traverse(function (o) {
+        if (o.geometry) geometries.add(o.geometry);
+        if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { materials.add(m); });
+      });
+      geometries.forEach(function (g) { g.dispose(); });
+      materials.forEach(function (m) { m.dispose(); });
+      currentModel = null;
+    }
+    var def = null;
+    for (var i = 0; i < LANDMARKS.length; i++) {
+      if (LANDMARKS[i].id === id) { def = LANDMARKS[i]; break; }
+    }
+    if (!def) return;
+
+    currentModel = def.build();
+    currentModel.traverse(function (o) {
+      if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+    });
+    scene.add(currentModel);
+  }
+
+  LANDMARKS.forEach(function (l) {
+    var opt = document.createElement('option');
+    opt.value = l.id;
+    opt.textContent = l.label;
+    picker.appendChild(opt);
+  });
+
+  picker.addEventListener('change', function () { show(picker.value); });
+
+  /* ---------------- render loop ---------------- */
+  var lastTime = performance.now();
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    var dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+
+    if (!dragging) {
+      theta += dt * 0.1;
+      updateCamera();
+    }
+
+    renderer.render(scene, camera);
+  }
+
+  show(LANDMARKS[0].id);
+  requestAnimationFrame(animate);
+})();
+</script>
+</body>
+</html>
