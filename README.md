@@ -91,7 +91,7 @@ JavaScript syntax was checked during setup. The deployment and dependency loadin
 
 ## Author and acknowledgments
 
-Built and maintained by **Shoaib Shah** ([sshnox](https://github.com/sshnox)). Developed with AI assistance.
+Built and maintained by **Shoaib Shah** ([sshnox](https://github.com/sshnox)).
 
 Three.js is provided by its contributors under the MIT license. 
 
