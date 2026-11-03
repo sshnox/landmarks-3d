@@ -65,17 +65,11 @@ The camera resumes its gentle rotation when you stop dragging. The app does not 
 
 ## Project structure
 
-```text
-landmarks-3d/
-├── index.html                  # Standalone viewer and procedural models
-├── README.md
-├── RESOURCES.md                # Source and dependency references
-└── reference/
-    ├── landmarks-original.html # Original standalone code
-    └── harness-plugin/         # Earlier plugin draft
-        ├── package.json
-        └── client.js
-```
+| File | Purpose |
+| --- | --- |
+| `index.html` | Standalone viewer and procedural models. |
+| `RESOURCES.md` | Third-party dependencies and licenses. |
+| `README.md` | Setup, controls, and project overview. |
 
 ## How it works
 
@@ -95,15 +89,11 @@ GitHub Pages publishes the root of the `main` branch. Changes pushed to `main` a
 
 JavaScript syntax was checked during setup. The deployment and dependency loading were verified, but 3D rendering could not be visually verified in the cloud browser because it could not create a WebGL context.
 
-## Harness integration
-
-The earlier DeepSeek Harness plugin draft is preserved in `reference/harness-plugin`. Its APIs, installation, initialization, and cleanup have not been verified inside Harness. The browser demo runs independently and is the recommended way to try the project.
-
 ## Author and acknowledgments
 
-Built and maintained by **Shoaib Shah** ([sshnox](https://github.com/sshnox)). I developed this project with AI assistance, starting from [this DeepSeek conversation](https://chat.deepseek.com/share/oz95851nu45x0xfls3), and adapted it into a standalone browser experience.
+Built and maintained by **Shoaib Shah** ([sshnox](https://github.com/sshnox)). Developed with AI assistance.
 
-Three.js is provided by its contributors under the MIT license. The original plugin manifest also declares MIT; that declaration is preserved in the reference directory.
+Three.js is provided by its contributors under the MIT license. 
 
 ## Contributing
 
