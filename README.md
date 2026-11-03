@@ -79,7 +79,7 @@ Switching landmarks removes the previous group and disposes of its geometries an
 
 ## Deployment
 
-GitHub Pages publishes the root of the `main` branch. Changes pushed to `main` are automatically redeployed. The viewer is public; the source repository is currently private.
+GitHub Pages publishes the root of the `main` branch. Changes pushed to `main` are automatically redeployed. Both the repository and the live site are public.
 
 ## Troubleshooting and limitations
 
